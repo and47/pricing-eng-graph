@@ -22,7 +22,7 @@ un.add_component('AAPL16')
 un.add_component('AAPL2', 4, 'AAPL16')
 un.add_component('AAPL4', 2, 'AAPL16')
 
-un.merged_view()
+un.merged_view
 
 un.fix_structure()
 un.init_components()
