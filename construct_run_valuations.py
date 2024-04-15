@@ -15,23 +15,13 @@ un.add_component('AUTOS', 3, 'INDUSTRIALS')
 
 
 un.merged_view
-
-un.fix_structure()
 un.init_components()
-
-un.stocks['AAPL'].update_value(173)
-un.stocks['AAPL'].update_value(174)  # prints AAPL16 twice, only 2nd is correct
-
-# need topo-sort or bfs logic not my dfs (with early stop) is still doing 1 redundant step/attempt
-# but topo-sort is expensive to recompute, so cache it?
-# also, reduce by excluding inactive nodes, e.g. if MSFT=nan, do not attempty value TECH
-# in a way, after pricing MSFT, add TECH as "viable to value" -- add to graph?
-# if old price was nan -- enable node
-
 un.merged_view
 
-un.fix_structure()
-un.init_components()
+
+un.stocks['AAPL'].update_value(173)
+un.stocks['AAPL'].update_value(174)
+
 
 un.stocks['AAPL'].update_value(173)
 un.stocks['MSFT'].update_value(425)
@@ -54,7 +44,7 @@ un.stocks['TSLA'].update_value(510.72)
 # - BFS still makes 1-attempt that in some scenario (too many of updates of same price) could have been cached
 #   - topological sort could have been used and updated upon "activation" of new nodes (akin to de-activating part of graph, for which there are no prices)
 # - could have used observer design pattern, making further use of weakref, with added benefit of more dynamic (during use) of portfolio definitions, e.g. portfolio removal, etc.
-
+# - not required by the task, but could have allowed for some prices may be known at a stage of portfolio definition
 
 
 def read_lines(filename):
@@ -68,7 +58,10 @@ un2 = AssetGraph()
 un2.add_components_from(my_gen_csv)
 un2.merged_view
 
-un2.fix_structure()
 un2.init_components()
 un2.merged_view
 
+un2.stocks['AAPL'].update_value(173)
+un2.stocks['MSFT'].update_value(425)
+un2.stocks['NVDA'].update_value(880)
+un2.stocks['AAPL'].update_value(174)

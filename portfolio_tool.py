@@ -5,12 +5,11 @@ from typing import Iterable
 
 
 class Component:
-    """Composite design pattern"""
-    def __init__(self, name: str, price_refidx: int, graph: ProxyType, value: float = nan):
+    """Composite design pattern to universally represent graph Nodes (whether stocks or portfolios)"""
+    def __init__(self, name: str, price_refidx: int, graph: ProxyType):
         self.name = name
         self.price_refidx = price_refidx
         self.graph = graph
-        # self.value = value  # not required for the task
 
     @property
     def price(self) -> float:
@@ -57,8 +56,8 @@ class Stock(Component):
 
 
 class Portfolio(Component):
-    def __init__(self, name: str, price_refidx: int, graph: ProxyType, value: float = nan):
-        super().__init__(name, price_refidx, graph, value)
+    def __init__(self, name: str, price_refidx: int, graph: ProxyType):
+        super().__init__(name, price_refidx, graph)
         # lists of (normally) ints:
         self.assets = []
         self.weights = []
@@ -81,8 +80,12 @@ class Portfolio(Component):
 
 class AssetGraph:
 
-    # can be disconnected subgraphs of stocks and (optionally other portfolios) belonging to portfolios
+    """To represent and implement what can be disconnected subgraphs of stocks and
+    (optionally other portfolios) belonging to portfolios"""
+
     def __init__(self):
+        """Adjacency lists (representation) and Nodes (implementation) for later:
+            filling (add components, edges) and two-step initialization (creating and linking node instances)"""
         self.stocks = {}      # leaves in a tree-like graph, actual nodes. stocks and portfolio are separated mostly for clarity
         self.portfolios = {}  # non-leaves in a tree-like graph, actual nodes including "roots" (top-level portfolios if needed)
         # intermediate structures, from which graph is later constructed:
@@ -114,15 +117,15 @@ class AssetGraph:
                 continue  # to handle or for now skipping empty line or EOF
 
     def add_component(self, name: str, qty: int | float = None, parent: str | None = None):
+        """Only fills adjacency lists, actual initialization of nodes is done later so that each node is created only once"""
         assert (parent is None) ^ (qty is not None), \
             "per example data: stock always belong to some portfolio and have quantity"
-        # only fills adjacency list, actual initialization of nodes is done later so that each node is created only once
         if parent is not None:
             if name in self.adj_list_parents_stocks:
-                self.adj_list_parents_stocks[name].append(parent)  # only this needed not below 2 for defaultdict
+                self.adj_list_parents_stocks[name].append(parent)
                 self.adj_list_parents_stock_weights[name].append(qty)  # can be a "subportfolio", not efficient to check here, instead will get reclassifed in self.fix_structure()
             else:
-                self.adj_list_parents_stocks[name] = [parent]
+                self.adj_list_parents_stocks[name] = [parent]  # these 2 lines won't be needed for defaultdict implementation
                 self.adj_list_parents_stock_weights[name] = [qty]
         else:
             if name not in self.adj_list_parents_portfolios:
@@ -131,20 +134,24 @@ class AssetGraph:
 
     @property
     def merged_view(self) -> tuple:
+        """Two adjaency lists: all nodes/components as combined dictionary and respectively all weights """
         return ( ChainMap(self.adj_list_parents_portfolios, self.adj_list_parents_stocks),
                   ChainMap(self.adj_list_parents_portfolio_weights, self.adj_list_parents_stock_weights) )
 
     def fix_structure(self):
-        # corrects adjacency lists that were built as data was "read in"
+        """ Corrects adjacency lists that were built as data was "read in" (easier to distinguish
+        stocks and portfolios on final set of related chunks of data) """
         to_move = [node for node in self.adj_list_parents_stocks if node in self.adj_list_parents_portfolios]
         for node in to_move:
             parents = self.adj_list_parents_stocks.pop(node)
             parent_weights = self.adj_list_parents_stock_weights.pop(node)
             self.adj_list_parents_portfolios[node].extend(parents)
             self.adj_list_parents_portfolio_weights[node].extend(parent_weights)
-        self.init_components()
 
     def init_components(self):
+        """Finalizes adjacency lists, and then creates a single central prices array maintained during valuations,
+             and in a Two-step process establishes nodes with edge (direct connectivity) info in them"""
+        self.fix_structure()
         self._init_prices()  # create a central prices array and map locating their tickers
         # 2 steps: init all nodes, then "fill info about edges" (parents/children all initialized)
         self._init_nodes()
