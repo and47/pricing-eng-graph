@@ -45,3 +45,15 @@ un.stocks['AAPL'].update_value(173)
 un.stocks['MSFT'].update_value(425)
 un.stocks['NVDA'].update_value(880)
 un.stocks['AAPL'].update_value(174)
+
+un.stocks['BMW'].update_value(14.43)
+un.stocks['FORD'].update_value(36)
+un.stocks['TSLA'].update_value(510.72)
+
+un.add_component('TSLA2x')
+un.add_component('ULTRA')
+un.add_component('TSLA', 2, 'TSLA2x')
+un.add_component('TSLA2x', 10, 'ULTRA')
+un.add_component('AAPL2', 5, 'ULTRA')
+un.add_component('TECH', 0.5, 'ULTRA')
+
