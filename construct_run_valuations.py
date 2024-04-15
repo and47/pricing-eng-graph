@@ -13,14 +13,6 @@ un.add_component('INDUSTRIALS')
 un.add_component('TECH', 2, 'INDUSTRIALS')
 un.add_component('AUTOS', 3, 'INDUSTRIALS')
 
-# first naive solution produces intermediate result before correct last one
-un.add_component('AAPL2')
-un.add_component('AAPL', 2, 'AAPL2')
-un.add_component('AAPL4')
-un.add_component('AAPL', 4, 'AAPL4')
-un.add_component('AAPL16')
-un.add_component('AAPL2', 4, 'AAPL16')
-un.add_component('AAPL4', 2, 'AAPL16')
 
 un.merged_view
 
@@ -36,7 +28,7 @@ un.stocks['AAPL'].update_value(174)  # prints AAPL16 twice, only 2nd is correct
 # in a way, after pricing MSFT, add TECH as "viable to value" -- add to graph?
 # if old price was nan -- enable node
 
-un.merged_view()
+un.merged_view
 
 un.fix_structure()
 un.init_components()
@@ -50,10 +42,33 @@ un.stocks['BMW'].update_value(14.43)
 un.stocks['FORD'].update_value(36)
 un.stocks['TSLA'].update_value(510.72)
 
-un.add_component('TSLA2x')
-un.add_component('ULTRA')
-un.add_component('TSLA', 2, 'TSLA2x')
-un.add_component('TSLA2x', 10, 'ULTRA')
-un.add_component('AAPL2', 5, 'ULTRA')
-un.add_component('TECH', 0.5, 'ULTRA')
+# - successfully tested on thousands of portfolios
+# - generators: - reading from CSV can easily be replaced with other source of sequential IO
+#               - do not fill memory, process more on the fly, more pythonic
+#               - can e.g. read portfolio definitions until all initial ones are defined, or read prices until all stock appear at least once, or read from the end (for most recent data)
+
+
+# limitations:
+# - allows any float value (not limited to e.g. cents, 2 digits after decimal point)
+# - no caching and certain cases failed my incremental update functionality, so it was disabled
+# - BFS still makes 1-attempt that in some scenario (too many of updates of same price) could have been cached
+#   - topological sort could have been used and updated upon "activation" of new nodes (akin to de-activating part of graph, for which there are no prices)
+# - could have used observer design pattern, making further use of weakref, with added benefit of more dynamic (during use) of portfolio definitions, e.g. portfolio removal, etc.
+
+
+
+def read_lines(filename):
+    with open(filename, 'r') as file:
+        for line in file:
+            yield line.strip().split(',')
+
+my_gen_csv = read_lines('./hwboa_portf_px/portfolios.csv')
+
+un2 = AssetGraph()
+un2.add_components_from(my_gen_csv)
+un2.merged_view
+
+un2.fix_structure()
+un2.init_components()
+un2.merged_view
 

@@ -1,6 +1,7 @@
 from collections import ChainMap
 from weakref import proxy, ProxyType
 from numpy import nan, isnan, ndarray, full, dot
+from typing import Iterable
 
 
 class Component:
@@ -23,14 +24,14 @@ class Component:
             self.print_value()
 
     def print_value(self, value: float | None = None):
-        print(f"{self.name} value: {value if value else self.price}")
+        print(f"{self.name},{value if value else self.price}")
 
     def update_parent_values(self, value_difference):
         """BFS (bottom-up) price updates for only affected portfolios and only if all input prices are present
         In multi-processing env can lock the tree being updated and only allow updates on disconnected subgraphs"""
 
         visited = [self.name]  # BFS visited nodes. name, weight (placeholder for 0th node)
-        queue = [(self.name, 1)]  # BFS queue with weights (cumulative product)
+        queue = [(self.name, 1)]  # BFS queue with weights (cumulative product, the weight is currently unused, see below)
         status = True  # early stop for BFS (affected nodes after a node that can't be priced)
 
         while queue:
@@ -82,19 +83,35 @@ class AssetGraph:
 
     # can be disconnected subgraphs of stocks and (optionally other portfolios) belonging to portfolios
     def __init__(self):
-        self.stocks = {}  # leaves in a tree-like graph, actual nodes. stocks and portfolio are separated mostly for clarity
+        self.stocks = {}      # leaves in a tree-like graph, actual nodes. stocks and portfolio are separated mostly for clarity
         self.portfolios = {}  # non-leaves in a tree-like graph, actual nodes including "roots" (top-level portfolios if needed)
         # intermediate structures, from which graph is later constructed:
-        self.adj_list_parents_stocks = {}      # key names and values are parents (portfolios)
+        self.adj_list_parents_stocks = {}         # key names and values are parents (portfolios)
         self.adj_list_parents_stock_weights = {}  # identical structure for weights (dicts and values, which are lists, both are ordered in Python)
         self.adj_list_parents_portfolios = {}  # keys are (sub)portfolio names, values are lists of parent portfolios
         self.adj_list_parents_portfolio_weights = {}
         # self.incomplete_stocks = set()  # for lazy initialization of evaluation DAGs (keep track of partial graphs that can be made complete as new prices appear)
 
-    def add_components_from(self, filename=None, name=None, qty=None, parent=None):
-        # interface, expects portfolio name or stock belonging to a known portfolio
-        # e.g. as in portfolios.csv
-        self.add_component(name, qty, parent)
+    def add_components_from(self, data_provider: Iterable):
+        """Interface, e.g. generator (better, lazy), ensures that the graph class is decoupled from the input source,
+         e.g. portfolios.csv, or other data read line-by-line, or (non-lazy) in-memory container like List"""
+        portfolio_name = ""
+        for line_items in data_provider:
+            if len(line_items) == 1 or len(line_items[1]) == 0:  # no quantity or empty string
+                self.add_component(portfolio_name := line_items[0])
+            elif len(line_items) == 2:
+                ticker, quantity = line_items
+                if (ticker.strip().upper() == "NAME") and \
+                   (quantity.strip().upper() == "SHARES"):
+                    continue
+                if portfolio_name:
+                    self.add_component(name=ticker, qty=float(quantity), parent=portfolio_name)
+                else:
+                    raise ValueError("expected portfolio name before list of components and quantities")
+            elif line_items:
+                raise AttributeError("expected one or two arguments, not more line items")
+            else:
+                continue  # to handle or for now skipping empty line or EOF
 
     def add_component(self, name: str, qty: int | float = None, parent: str | None = None):
         assert (parent is None) ^ (qty is not None), \
