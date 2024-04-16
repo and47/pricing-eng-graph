@@ -97,31 +97,32 @@ class AssetGraph:
 
     def add_components_from(self, data_provider: Iterable):
         """Interface, e.g. generator (better, lazy), ensures that the graph class is decoupled from the input source,
-         e.g. portfolios.csv, or other data read line-by-line, or (non-lazy) in-memory container like List"""
-        portfolio_name = ""
-        for line_items in data_provider:
-            if len(line_items) == 1 or len(line_items[1]) == 0:  # no quantity or empty string
-                self.add_component(portfolio_name := line_items[0])
-            elif len(line_items) == 2:
-                ticker, quantity = line_items
-                if (ticker.strip().upper() == "NAME") and \
-                   (quantity.strip().upper() == "SHARES"):
-                    continue
-                if portfolio_name:
-                    self.add_component(name=ticker, qty=float(quantity), parent=portfolio_name)
-                else:
-                    raise ValueError("expected portfolio name before list of components and quantities")
-            elif line_items:
-                raise AttributeError("expected one or two arguments, not more line items")
+         e.g. portfolios.csv, or other data read line-by-line, or (non-lazy) in-memory container like List.
+         For data integrity, portfolio data is expected in blocks (combining info on a each single portfolio)"""
+
+        for portfolio_block in data_provider:
+            if isinstance(portfolio_block[0], str):  # a single string with portfolio name defines new block
+                self.add_component(portfolio_name := portfolio_block[0])
             else:
-                continue  # to handle or for now skipping empty line or EOF
+                raise ValueError("expected portfolio name at the start (before list of components and quantities)")
+
+            for line_items in portfolio_block[1:]:  # process the rest of the items in the block
+                if len(line_items) == 2:
+                    ticker, quantity = line_items
+                    if portfolio_name:
+                        self.add_component(name=ticker, qty=float(quantity), parent=portfolio_name)
+                    else:
+                        raise ValueError(f"Invalid portfolio name, {portfolio_name}")  # check for empty string
+                else:
+                    raise ValueError(f"Line items for {portfolio_name=} do not match expected format. " + \
+                                     f"Expected Component and Quantity, got: {line_items}")
 
     def add_component(self, name: str, qty: int | float = None, parent: str | None = None):
         """Only fills adjacency lists, actual initialization of nodes is done later so that each node is created only once"""
         assert (parent is None) ^ (qty is not None), \
             "per example data: stock always belong to some portfolio and have quantity"
         if parent is not None:
-            if name in self.adj_list_parents_stocks:
+            if name in self.adj_list_parents_stocks:  # can be improved to treat duplicate info (repeated edge)
                 self.adj_list_parents_stocks[name].append(parent)
                 self.adj_list_parents_stock_weights[name].append(qty)  # can be a "subportfolio", not efficient to check here, instead will get reclassifed in self.fix_structure()
             else:

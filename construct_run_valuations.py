@@ -47,12 +47,9 @@ un.stocks['TSLA'].update_value(510.72)
 # - not required by the task, but could have allowed for some prices may be known at a stage of portfolio definition
 
 
-def read_lines(filename):
-    with open(filename, 'r') as file:
-        for line in file:
-            yield line.strip().split(',')
+from data_io import read_csv_portfolios_weights #, read_csv_prices, write_csv_prices
 
-my_gen_csv = read_lines('./hwboa_portf_px/portfolios.csv')
+my_gen_csv = read_csv_portfolios_weights('./hwboa_portf_px/portfolios.csv')
 
 un2 = AssetGraph()
 un2.add_components_from(my_gen_csv)
