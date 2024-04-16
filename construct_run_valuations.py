@@ -3,15 +3,15 @@ from portfolio_tool import AssetGraph
 # example with input files
 from data_io import read_csv_portfolios_weights, streamin_csv_prices
 
-generator_portfolios = read_csv_portfolios_weights("./hwboa_portf_px/portfolios.csv")
+generator_portfolios = read_csv_portfolios_weights("./portfolios.csv")
 
-simPortfolio = AssetGraph(stdout=open("out_prices.csv", 'a'))
+simPortfolio = AssetGraph(stdout=open("portfolio_prices.csv", 'a'))
 simPortfolio.add_components_from(generator_portfolios)
 
 simPortfolio.init_components()  # finished defining portfolios
 
 
-generator_prices = streamin_csv_prices("./hwboa_portf_px/prices.csv")
+generator_prices = streamin_csv_prices("./prices.csv")
 simPortfolio.update_prices_from(generator_prices)  # streams continuously, press Ctrl-C to stop
 
 
