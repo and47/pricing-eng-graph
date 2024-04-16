@@ -1,3 +1,6 @@
+import time
+
+
 def read_csv_portfolios_weights(filename):
     """Read portfolio data from file (e.g. CSV) in blocks.
     Each block defines a portfolio.
@@ -31,13 +34,31 @@ def read_csv_portfolios_weights(filename):
             yield block
 
 
-def read_csv_prices(filename):
+def streamin_csv_prices(filename):
+    """Reads in price data from file (e.g. CSV), and then follows the file for updates (new appends)"""
+
+    def _get_line_items(line):
+        line_items = line.strip().split(",")  # just an example of validation (2 items or 3 if the last is empty str)
+        if not (len(line_items) == 2 or (len(line_items) == 3 and not line_items[2])):
+            raise ValueError(f"Expected two line items, got: {line}")
+        return line_items[:2]
+
     with open(filename, 'r') as file:
-        header = next(file).strip().split(',')
-        if (header[0].strip().upper() != "NAME") or \
-           (header[1].strip().upper() != "SHARES"):
-            raise ValueError(f"Header {header} does not match expected format: 'NAME, SHARES'")
+        header = next(file)
+        header_items = _get_line_items(header)
+        if (header_items[0].strip().upper() != "NAME") or \
+           (header_items[1].strip().upper() != "PRICE"):
+            raise ValueError(f"Header {header} does not match expected format: 'NAME, PRICE'")
 
+        while True:
+            line = file.readline()  # reads existing lines upon initialization
+            if not line:
+                break  # stops if no more lines
+            yield _get_line_items(line)
 
-def write_csv_prices(filename):
-    pass
+        while True:  # after initialization, wait for new lines
+            line = file.readline()
+            if not line:
+                time.sleep(0.1)  # to limit IO
+                continue
+            yield _get_line_items(line)

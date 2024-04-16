@@ -1,37 +1,49 @@
 from portfolio_tool import AssetGraph
 
-un = AssetGraph()
-un.add_component('TECH')
-un.add_component('AAPL', 100, 'TECH')
-un.add_component('MSFT', 200, 'TECH')
-un.add_component('NVDA', 300, 'TECH')
-un.add_component('AUTOS')
-un.add_component('FORD', 100, 'AUTOS')
-un.add_component('TSLA', 200, 'AUTOS')
-un.add_component('BMW', 200, 'AUTOS')
-un.add_component('INDUSTRIALS')
-un.add_component('TECH', 2, 'INDUSTRIALS')
-un.add_component('AUTOS', 3, 'INDUSTRIALS')
+# example with input files
+from data_io import read_csv_portfolios_weights, streamin_csv_prices
+
+generator_portfolios = read_csv_portfolios_weights("./hwboa_portf_px/portfolios.csv")
+
+simPortfolio = AssetGraph(stdout=open("out_prices.csv", 'a'))
+simPortfolio.add_components_from(generator_portfolios)
+
+simPortfolio.init_components()  # finished defining portfolios
 
 
-un.merged_view
-un.init_components()
-un.merged_view
+generator_prices = streamin_csv_prices("./hwboa_portf_px/prices.csv")
+simPortfolio.update_prices_from(generator_prices)  # streams continuously, press Ctrl-C to stop
 
 
-un.stocks['AAPL'].update_value(173)
-un.stocks['AAPL'].update_value(174)
+
+# example with manual user input
+
+userPortfolio = AssetGraph()
+userPortfolio.add_component('TECH')
+userPortfolio.add_component('AAPL', 100, 'TECH')
+userPortfolio.add_component('MSFT', 200, 'TECH')
+userPortfolio.add_component('NVDA', 300, 'TECH')
+userPortfolio.add_component('AUTOS')
+userPortfolio.add_component('FORD', 100, 'AUTOS')
+userPortfolio.add_component('TSLA', 200, 'AUTOS')
+userPortfolio.add_component('BMW', 200, 'AUTOS')
+userPortfolio.add_component('INDUSTRIALS')
+userPortfolio.add_component('TECH', 2, 'INDUSTRIALS')
+userPortfolio.add_component('AUTOS', 3, 'INDUSTRIALS')
 
 
-un.stocks['AAPL'].update_value(173)
-un.stocks['MSFT'].update_value(425)
-un.stocks['NVDA'].update_value(880)
-un.stocks['AAPL'].update_value(174)
+userPortfolio.init_components()
 
-un.stocks['BMW'].update_value(14.43)
-un.stocks['FORD'].update_value(36)
-un.stocks['TSLA'].update_value(510.72)
+userPortfolio.stocks['AAPL'].update_value(173)
+userPortfolio.stocks['MSFT'].update_value(425)
+userPortfolio.stocks['NVDA'].update_value(880)
+userPortfolio.stocks['AAPL'].update_value(174)
 
+userPortfolio.stocks['BMW'].update_value(14.43)
+userPortfolio.stocks['FORD'].update_value(36)
+userPortfolio.stocks['TSLA'].update_value(510.72)
+
+# Notes
 # - successfully tested on thousands of portfolios
 # - generators: - reading from CSV can easily be replaced with other source of sequential IO
 #               - do not fill memory, process more on the fly, more pythonic
@@ -45,20 +57,4 @@ un.stocks['TSLA'].update_value(510.72)
 #   - topological sort could have been used and updated upon "activation" of new nodes (akin to de-activating part of graph, for which there are no prices)
 # - could have used observer design pattern, making further use of weakref, with added benefit of more dynamic (during use) of portfolio definitions, e.g. portfolio removal, etc.
 # - not required by the task, but could have allowed for some prices may be known at a stage of portfolio definition
-
-
-from data_io import read_csv_portfolios_weights #, read_csv_prices, write_csv_prices
-
-my_gen_csv = read_csv_portfolios_weights('./hwboa_portf_px/portfolios.csv')
-
-un2 = AssetGraph()
-un2.add_components_from(my_gen_csv)
-un2.merged_view
-
-un2.init_components()
-un2.merged_view
-
-un2.stocks['AAPL'].update_value(173)
-un2.stocks['MSFT'].update_value(425)
-un2.stocks['NVDA'].update_value(880)
-un2.stocks['AAPL'].update_value(174)
+# - allowing and not catching cycles in a graph. an alternative implementation with Kahn's algorithm for toposort could have improved that

@@ -1,3 +1,4 @@
+import sys
 from collections import ChainMap
 from weakref import proxy, ProxyType
 from numpy import nan, isnan, ndarray, full, dot
@@ -20,10 +21,10 @@ class Component:
     def price(self, value: float):
         if self.price != value:
             self.graph.all_prices[self.price_refidx] = value
-            self.print_value()
+            print(self, file=self.graph.stdout, flush=True)
 
-    def print_value(self, value: float | None = None):
-        print(f"{self.name},{value if value else self.price}")
+    def __str__(self):
+        return f"{self.name},{self.price}"
 
     def update_parent_values(self, value_difference):
         """BFS (bottom-up) price updates for only affected portfolios and only if all input prices are present
@@ -83,7 +84,7 @@ class AssetGraph:
     """To represent and implement what can be disconnected subgraphs of stocks and
     (optionally other portfolios) belonging to portfolios"""
 
-    def __init__(self):
+    def __init__(self, stdout=sys.stdout):
         """Adjacency lists (representation) and Nodes (implementation) for later:
             filling (add components, edges) and two-step initialization (creating and linking node instances)"""
         self.stocks = {}      # leaves in a tree-like graph, actual nodes. stocks and portfolio are separated mostly for clarity
@@ -94,6 +95,7 @@ class AssetGraph:
         self.adj_list_parents_portfolios = {}  # keys are (sub)portfolio names, values are lists of parent portfolios
         self.adj_list_parents_portfolio_weights = {}
         # self.incomplete_stocks = set()  # for lazy initialization of evaluation DAGs (keep track of partial graphs that can be made complete as new prices appear)
+        self.stdout = stdout  # work-around to print (append) to file, defaults to console
 
     def add_components_from(self, data_provider: Iterable):
         """Interface, e.g. generator (better, lazy), ensures that the graph class is decoupled from the input source,
@@ -132,6 +134,12 @@ class AssetGraph:
             if name not in self.adj_list_parents_portfolios:
                 self.adj_list_parents_portfolios[name] = []  # defaultdict can be used as alternative implementation, but requires more changes
                 self.adj_list_parents_portfolio_weights[name] = []
+
+    def update_prices_from(self, data_provider: Iterable):
+        """Interface, e.g. generator (better, lazy), ensures that the graph class is decoupled from the input source,
+         e.g. prices.csv, or other data streamed in line-by-line, or (non-lazy) in-memory container like List."""
+        for (ticker, price) in data_provider:
+            self.stocks[ticker].update_value(float(price))
 
     @property
     def merged_view(self) -> tuple:
