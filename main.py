@@ -5,16 +5,16 @@ from portfolio_tool import AssetGraph
 # example with input files
 from data_io import read_csv_portfolios_weights, streamin_csv_prices
 
-generator_portfolios = read_csv_portfolios_weights("./portfolios.csv")
+generator_portfolios = read_csv_portfolios_weights("./example_data/portfolios.csv")
 
-simUniverse = AssetGraph(stdout=open("portfolio_prices.csv", 'a'))
+simUniverse = AssetGraph(stdout=open("./example_data/portfolio_prices.csv", 'a'))
 simUniverse.add_components_from(generator_portfolios)
 
 simUniverse.init_components(est_risk_factors=True)  # finished defining portfolios
 # simUniverse.init_components()  # slower alternative, defaulting to est_risk_factors=False
 
 
-generator_prices = streamin_csv_prices("./prices.csv")
+generator_prices = streamin_csv_prices("./example_data/prices.csv")
 simUniverse.update_prices_from(generator_prices)  # streams continuously, press Ctrl-C to stop
 
 
