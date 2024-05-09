@@ -35,7 +35,7 @@ class Component:
         status = True  # early stop for BFS (affected nodes after a node that can't be priced)
 
         while queue:
-            node, current_weight = queue.pop(0)
+            node, current_weight = queue.pop(0)  # collections.deque.popleft() should be faster
             if node != self.name:  # evaluate parent portfolios using cumulative (product of prior) weights:
                 # self.graph.portfolios[node].update_value(value_difference * current_weight)
                 status = self.graph.portfolios[node].update_value()  # incremental update abandoned after own test cases
@@ -100,7 +100,7 @@ class AssetGraph:
     def add_components_from(self, data_provider: Iterable):
         """Interface, e.g. generator (better, lazy), ensures that the graph class is decoupled from the input source,
          e.g. portfolios.csv, or other data read line-by-line, or (non-lazy) in-memory container like List.
-         For data integrity, portfolio data is expected in blocks (combining info on a each single portfolio)"""
+         For data integrity, portfolio data is expected in blocks (combining info on each single portfolio)"""
 
         for portfolio_block in data_provider:
             if isinstance(portfolio_block[0], str):  # a single string with portfolio name defines new block
@@ -145,7 +145,7 @@ class AssetGraph:
     def merged_view(self) -> tuple:
         """Two adjaency lists: all nodes/components as combined dictionary and respectively all weights """
         return ( ChainMap(self.adj_list_parents_portfolios, self.adj_list_parents_stocks),
-                  ChainMap(self.adj_list_parents_portfolio_weights, self.adj_list_parents_stock_weights) )
+                 ChainMap(self.adj_list_parents_portfolio_weights, self.adj_list_parents_stock_weights) )
 
     def fix_structure(self):
         """ Corrects adjacency lists that were built as data was "read in" (easier to distinguish
