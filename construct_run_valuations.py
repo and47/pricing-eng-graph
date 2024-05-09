@@ -1,3 +1,5 @@
+# tested with 3.10.14
+
 from portfolio_tool import AssetGraph
 
 # example with input files
@@ -5,56 +7,42 @@ from data_io import read_csv_portfolios_weights, streamin_csv_prices
 
 generator_portfolios = read_csv_portfolios_weights("./portfolios.csv")
 
-simPortfolio = AssetGraph(stdout=open("portfolio_prices.csv", 'a'))
-simPortfolio.add_components_from(generator_portfolios)
+simUniverse = AssetGraph(stdout=open("portfolio_prices.csv", 'a'))
+simUniverse.add_components_from(generator_portfolios)
 
-simPortfolio.init_components()  # finished defining portfolios
+simUniverse.init_components(est_risk_factors=True)  # finished defining portfolios
+# simUniverse.init_components()  # slower alternative, defaulting to est_risk_factors=False
 
 
 generator_prices = streamin_csv_prices("./prices.csv")
-simPortfolio.update_prices_from(generator_prices)  # streams continuously, press Ctrl-C to stop
+simUniverse.update_prices_from(generator_prices)  # streams continuously, press Ctrl-C to stop
 
 
 
-# example with manual user input
+# example with manual user input of asset universe
 
-userPortfolio = AssetGraph()
-userPortfolio.add_component('TECH')
-userPortfolio.add_component('AAPL', 100, 'TECH')
-userPortfolio.add_component('MSFT', 200, 'TECH')
-userPortfolio.add_component('NVDA', 300, 'TECH')
-userPortfolio.add_component('AUTOS')
-userPortfolio.add_component('FORD', 100, 'AUTOS')
-userPortfolio.add_component('TSLA', 200, 'AUTOS')
-userPortfolio.add_component('BMW', 200, 'AUTOS')
-userPortfolio.add_component('INDUSTRIALS')
-userPortfolio.add_component('TECH', 2, 'INDUSTRIALS')
-userPortfolio.add_component('AUTOS', 3, 'INDUSTRIALS')
-
-
-userPortfolio.init_components()
-
-userPortfolio.stocks['AAPL'].update_value(173)
-userPortfolio.stocks['MSFT'].update_value(425)
-userPortfolio.stocks['NVDA'].update_value(880)
-userPortfolio.stocks['AAPL'].update_value(174)
-
-userPortfolio.stocks['BMW'].update_value(14.43)
-userPortfolio.stocks['FORD'].update_value(36)
-userPortfolio.stocks['TSLA'].update_value(510.72)
-
-# Notes
-# - successfully tested on thousands of portfolios
-# - generators: - reading from CSV can easily be replaced with other source of sequential IO
-#               - do not fill memory, process more on the fly, more pythonic
-#               - can e.g. read portfolio definitions until all initial ones are defined, or read prices until all stock appear at least once, or read from the end (for most recent data)
+userUniverse = AssetGraph()
+userUniverse.add_component('TECH')
+userUniverse.add_component('AAPL', 100, 'TECH')
+userUniverse.add_component('MSFT', 200, 'TECH')
+userUniverse.add_component('NVDA', 300, 'TECH')
+userUniverse.add_component('AUTOS')
+userUniverse.add_component('FORD', 100, 'AUTOS')
+userUniverse.add_component('TSLA', 200, 'AUTOS')
+userUniverse.add_component('BMW', 200, 'AUTOS')
+userUniverse.add_component('INDUSTRIALS')
+userUniverse.add_component('TECH', 2, 'INDUSTRIALS')
+userUniverse.add_component('AUTOS', 3, 'INDUSTRIALS')
 
 
-# limitations:
-# - allows any float value (not limited to e.g. cents, 2 digits after decimal point)
-# - no caching and certain cases failed my incremental update functionality, so it was disabled
-# - BFS still makes 1-attempt that in some scenario (too many of updates of same price) could have been cached
-#   - topological sort could have been used and updated upon "activation" of new nodes (akin to de-activating part of graph, for which there are no prices)
-# - could have used observer design pattern, making further use of weakref, with added benefit of more dynamic (during use) of portfolio definitions, e.g. portfolio removal, etc.
-# - not required by the task, but could have allowed for some prices may be known at a stage of portfolio definition
-# - allowing and not catching cycles in a graph. an alternative implementation with Kahn's algorithm for toposort could have improved that
+userUniverse.init_components(est_risk_factors=True)
+# userUniverse.init_components()
+
+userUniverse.stocks['AAPL'].update_value(173)
+userUniverse.stocks['MSFT'].update_value(425)
+userUniverse.stocks['NVDA'].update_value(880)
+userUniverse.stocks['AAPL'].update_value(174)
+
+userUniverse.stocks['BMW'].update_value(14.43)
+userUniverse.stocks['FORD'].update_value(36)
+userUniverse.stocks['TSLA'].update_value(510.72)

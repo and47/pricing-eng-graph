@@ -1,14 +1,17 @@
 import sys
-from collections import ChainMap
+from collections import ChainMap, deque
 from weakref import proxy, ProxyType
-from numpy import nan, isnan, ndarray, full, dot
+
+from numpy import nan, isnan, array, ndarray, full, dot, zeros
 from typing import Iterable
+from abc import ABCMeta, abstractmethod
 
 
-class Component:
+class Component(metaclass=ABCMeta):
     """Composite design pattern to universally represent graph Nodes (whether stocks or portfolios)"""
-    def __init__(self, name: str, price_refidx: int, graph: ProxyType):
+    def __init__(self, name: str, idx: int, price_refidx: int, graph: ProxyType):
         self.name = name
+        self.id = idx  # unlike price_refidx, this id (index) is separate portfolio or stock (both start from 0s)
         self.price_refidx = price_refidx
         self.graph = graph
 
@@ -26,25 +29,48 @@ class Component:
     def __str__(self):
         return f"{self.name},{self.price}"
 
-    def update_parent_values(self, value_difference):
+    @abstractmethod
+    def update_value(self):
+        pass
+
+    def update_parent_values(self):
         """BFS (bottom-up) price updates for only affected portfolios and only if all input prices are present
+        This is implementation of 1st approach, traversal on every stock price update.
+        See `update_owners_deltas` for 2nd approach, where value_difference is used for incremental update using pre-
+         computed factors (traversal is done at `AssetGraph.init_components`). Also, see `AssetGraph.stock_deltas`).
         In multi-processing env can lock the tree being updated and only allow updates on disconnected subgraphs"""
 
         visited = [self.name]  # BFS visited nodes. name, weight (placeholder for 0th node)
-        queue = [(self.name, 1)]  # BFS queue with weights (cumulative product, the weight is currently unused, see below)
+        queue = deque([self.name])  # BFS queue without weights
         status = True  # early stop for BFS (affected nodes after a node that can't be priced)
 
         while queue:
-            node, current_weight = queue.pop(0)  # collections.deque.popleft() should be faster
+            node = queue.popleft()  # collections.deque.popleft() is faster than list.pop(0)
             if node != self.name:  # evaluate parent portfolios using cumulative (product of prior) weights:
-                # self.graph.portfolios[node].update_value(value_difference * current_weight)
-                status = self.graph.portfolios[node].update_value()  # incremental update abandoned after own test cases
+                # incremental update abandoned after own test cases (both direct and indirect ownership)
+                status = self.graph.portfolios[node].update_value()  # value_difference is used in approach 2, see help
             if status:
-                for parent, weight in zip(self.graph.merged_view[0][node],
-                                          self.graph.merged_view[1][node]):
+                for parent in self.graph.merged_view[0][node]:  # over stock/portfolio owners
                     if parent not in visited:
                         visited.append(parent)
-                        queue.append((parent, current_weight * weight))
+                        queue.append(parent)
+
+    def update_owners_deltas(self):
+        """BFS (bottom-up) delta (incremental) updates for only affected portfolios.
+        No early stopping unlike `self.update_parent_values`. """
+        visited = [self.name]  # BFS visited nodes. name, weight (placeholder for 0th node)
+        queue = deque([(self.name, 1)])  # double-ended queue for BFS with weights (cumulative product along the ownership path)
+
+        stock_name, stock_id = self.name, self.id  # name and index (used for navigation)
+        while queue:
+            node_name, current_weight = queue.popleft()  # collections.deque.popleft() is faster than list.pop(0)
+            if node_name != stock_name:  # calculate parent portfolio delta as cumulative (product of prior) weights:
+                self.graph.portfolios[node_name].set_delta(stock_id, delta=current_weight)
+            for parent, weight in zip(self.graph.merged_view[0][node_name],
+                                      self.graph.merged_view[1][node_name]):
+                if parent not in visited:  # this works as between 2 layers there's only 1 edge, but stock can be owned
+                    visited.append(parent)  # ... both directly and indirectly at the same time (by same portfolio)
+                    queue.append((parent, current_weight * weight))
 
 
 class Stock(Component):
@@ -53,30 +79,59 @@ class Stock(Component):
         self.price = new_value
 
         value_difference = new_value - old_value
-        self.update_parent_values(value_difference)
+        is_first_price = isnan(value_difference)
+        stock_id = self.id
+        if self.graph.stock_deltas is not None and stock_id < self.graph.stock_deltas.shape[1]:  # approach 2
+            # efficiently update only affected portfolios using deltas without traversal (done at init stage)
+            for portfolio_id, delta_s in enumerate(self.graph.stock_deltas[:, stock_id]):
+                if delta_s:  # !=0 => affected portfolio
+                    portfolio_name = list(self.graph.portfolios.keys())[portfolio_id]
+                    if is_first_price:
+                        self.graph.portfolios[portfolio_name].n_px_to_value -= 1
+                        self.graph.portfolios[portfolio_name].update_value(self.price * delta_s)
+                    else:
+                        self.graph.portfolios[portfolio_name].update_value(value_difference * delta_s)
+        else:  # approach 1
+            self.update_parent_values()
 
 
 class Portfolio(Component):
-    def __init__(self, name: str, price_refidx: int, graph: ProxyType):
-        super().__init__(name, price_refidx, graph)
+    def __init__(self, name: str, idx: int, price_refidx: int, graph: ProxyType):
+        super().__init__(name, idx, price_refidx, graph)
         # lists of (normally) ints:
-        self.assets = []
+        self.assets = []  # all
         self.weights = []
+        self.n_px_to_value = 0  # stocks prices counter: number of ultimate underlying price required to value self
 
     @property
     def asset_prices(self) -> ndarray:
         return self.graph.all_prices[self.assets]
 
     def update_value(self, value_difference: int | float = nan) -> bool:
-        """Supports fully recomputing portfolio or incremental update from single new asset price"""
+        """
+        Evaluate portfolio if possible. Supports fully recomputing portfolio value or an
+        incremental update from a single new asset price (value_difference already is weight multiplied).
+        :return: bool True if successful valuation or False if lacks one or more stock prices
+        """
         # print(f"...evaluating {self.name}")
         if not isnan(self.price) and not isnan(value_difference):
             self.price += value_difference
-        elif any(isnan(px := self.asset_prices)):
+        elif self.graph.stock_deltas is None and any(isnan(self.asset_prices)):  # O(n) in 1st valuation approach
+            return False
+        elif self.n_px_to_value > 0:  # O(1) in 2nd approach (single traversal)
             return False
         else:  # first time value calculated (all component prices are present)
-            self.price = dot(px, self.weights)
+            self.price = dot(self.asset_prices, self.weights)
         return True
+
+    def set_delta(self, stock_id: int, delta: int | float = nan) -> None:
+        """Update cumulative (product) delta of the ultimate underlying stock"""
+        # print(f"...evaluating {self.name}")
+        # update "total" delta: from 0 or increment existing delta (via one portfolio path) with new one (via another ownership path)
+        portfolio_id = self.id
+        if self.graph.stock_deltas[portfolio_id, stock_id] == 0:
+            self.n_px_to_value += 1  # new stock (ultimate underlying) portfolio depends on
+        self.graph.stock_deltas[portfolio_id, stock_id] += delta  # portfolios in rows, price_refidx == P deltas rindex
 
 
 class AssetGraph:
@@ -96,6 +151,7 @@ class AssetGraph:
         self.adj_list_parents_portfolio_weights = {}
         # self.incomplete_stocks = set()  # for lazy initialization of evaluation DAGs (keep track of partial graphs that can be made complete as new prices appear)
         self.stdout = stdout  # work-around to print (append) to file, defaults to console
+        self.stock_deltas = None  # see `self.init_components`
 
     def add_components_from(self, data_provider: Iterable):
         """Interface, e.g. generator (better, lazy), ensures that the graph class is decoupled from the input source,
@@ -157,14 +213,21 @@ class AssetGraph:
             self.adj_list_parents_portfolios[node].extend(parents)
             self.adj_list_parents_portfolio_weights[node].extend(parent_weights)
 
-    def init_components(self):
+    def init_components(self, est_risk_factors: bool | None = False):
         """Finalizes adjacency lists, and then creates a single central prices array maintained during valuations,
-             and in a Two-step process establishes nodes with edge (direct connectivity) info in them"""
+             and in a Two-step process establishes nodes with edge (direct connectivity) info in them.
+        :param est_risk_factors: establish risk factors, i.e. delta to ultimate underlying stocks by performing graph
+         traversal to leave nodes and creating an array of deltas for each portfolio. Aka 2nd valuation approach.
+        """
         self.fix_structure()
         self._init_prices()  # create a central prices array and map locating their tickers
         # 2 steps: init all nodes, then "fill info about edges" (parents/children all initialized)
         self._init_nodes()
         self._link_nodes()  # this can be done with a reverse map, instead inverse relations are kept in nodes
+        if est_risk_factors:
+            self.stock_deltas = zeros(shape=(len(self.portfolios), len(self.stocks)), dtype=float)
+            for stock_node in self.stocks.values():
+                stock_node.update_owners_deltas()
 
     def _init_prices(self):
         self.all_prices = full(len(self.merged_view[0]), nan)  # numpy array for efficient sum, ordered per dict
@@ -172,12 +235,10 @@ class AssetGraph:
         self.all_refidx = {ticker: i for i, ticker in enumerate(self.merged_view[0].keys())}
 
     def _init_nodes(self):
-        for name, owners in self.adj_list_parents_stocks.items():
-            self.stocks[name] = Stock(name, graph=proxy(self), price_refidx=self.all_refidx[name])
-        for name, owners in self.adj_list_parents_portfolios.items():
-            self.portfolios[name] = Portfolio(name,
-                                              graph=proxy(self),
-                                              price_refidx=self.all_refidx[name])
+        for i, (name, owners) in enumerate(self.adj_list_parents_stocks.items()):
+            self.stocks[name] = Stock(name, idx=i, graph=proxy(self), price_refidx=self.all_refidx[name])
+        for i, (name, owners) in enumerate(self.adj_list_parents_portfolios.items()):
+            self.portfolios[name] = Portfolio(name, idx=i, graph=proxy(self), price_refidx=self.all_refidx[name])
 
     def _link_nodes(self):
         for name, stock in self.stocks.items():
